@@ -7,14 +7,17 @@ const [shell, styles, hosting] = await Promise.all([
 ]);
 
 const html = shell.replace("/*__STYLES__*/", styles);
-const worker = `const html = ${JSON.stringify(html)};
+const worker = `const htmlTemplate = ${JSON.stringify(html)};
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname !== "/" && url.pathname !== "/index.html") {
       return new Response("Not found", { status: 404 });
     }
+    const html = htmlTemplate
+      .replaceAll("__SUPABASE_URL__", env.SUPABASE_URL || "")
+      .replaceAll("__SUPABASE_PUBLISHABLE_KEY__", env.SUPABASE_PUBLISHABLE_KEY || "");
     return new Response(html, {
       headers: {
         "content-type": "text/html; charset=UTF-8",

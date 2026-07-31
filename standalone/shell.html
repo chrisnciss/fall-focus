@@ -6,13 +6,13 @@
   <title>Fall Focus</title>
   <meta name="description" content="A calm, seasonal task tracker for getting meaningful work done.">
   <style>/*__STYLES__*/
-  .brand-mark{font-size:18px}.add-form{display:grid;gap:18px}.add-form h2{font-family:"Instrument Serif",serif;font-size:46px;font-weight:400;line-height:.95;margin:0 0 8px}.add-form label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.12em;font-weight:600;color:var(--muted)}.add-form input,.add-form select{width:100%;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);outline:0;padding:11px 2px;margin-top:4px}.add-form input:focus,.add-form select:focus{border-color:var(--rust)}.modal[hidden]{display:none}.modal{display:block}.leaf-icon{font-size:22px}.check{font-size:14px}.search span{font-size:17px}.delete{font-size:18px}</style>
+  .brand-mark{font-size:18px}.add-form{display:grid;gap:18px}.add-form h2{font-family:"Instrument Serif",serif;font-size:46px;font-weight:400;line-height:.95;margin:0 0 8px}.add-form label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.12em;font-weight:600;color:var(--muted)}.add-form input,.add-form select{width:100%;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);outline:0;padding:11px 2px;margin-top:4px}.add-form input:focus,.add-form select:focus{border-color:var(--rust)}.modal[hidden]{display:none}.modal{display:block}.leaf-icon{font-size:22px}.check{font-size:14px}.search span{font-size:17px}.delete{font-size:18px}.account{display:flex;align-items:center;gap:12px}.account button{border:1px solid var(--line);background:transparent;padding:8px 12px;cursor:pointer;font-size:12px}.sync{font-size:11px;color:var(--muted)}.sync.online{color:var(--sage)}.auth-note{color:var(--muted);font-size:13px;line-height:1.6;margin:0}.auth-message{font-size:13px;color:var(--rust);min-height:20px}.loading{opacity:.55;pointer-events:none}@media(max-width:760px){.account .sync{display:none}}</style>
 </head>
 <body>
 <main>
   <header>
     <a class="brand" href="#"><span class="brand-mark">⌁</span><span>Fall <i>Focus</i></span></a>
-    <div class="season"><span></span> FALL 2026</div>
+    <div class="account"><span class="sync" id="sync-status">Sign in to sync</span><button id="account-button">Sign in</button></div>
   </header>
   <section class="hero">
     <div>
@@ -54,8 +54,22 @@
       <button class="primary submit" type="submit">＋ Add task</button>
     </form>
   </div>
+  <div class="modal-backdrop modal" id="auth-modal" hidden>
+    <form class="modal add-form" id="auth-form">
+      <button type="button" class="close" id="close-auth" aria-label="Close">×</button>
+      <p class="eyebrow">SYNC EVERYWHERE</p>
+      <h2>Your fall list,<br><em>on every device.</em></h2>
+      <p class="auth-note">Enter your email and we’ll send a secure sign-in link. Use the same email on each device.</p>
+      <label>Email address<input id="auth-email" type="email" required placeholder="you@example.com"></label>
+      <p class="auth-message" id="auth-message"></p>
+      <button class="primary submit" type="submit">Email me a sign-in link</button>
+    </form>
+  </div>
 </main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+const SUPABASE_URL="__SUPABASE_URL__",SUPABASE_KEY="__SUPABASE_PUBLISHABLE_KEY__";
+const cloud=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const seed=[
  {id:1,title:"Finish project proposal",category:"Work",priority:"High",due:"2026-09-12",done:false},
  {id:2,title:"Schedule fall check-in",category:"Planning",priority:"Medium",due:"2026-09-18",done:false},
@@ -63,12 +77,31 @@ const seed=[
  {id:4,title:"Prepare quarterly review",category:"Work",priority:"High",due:"2026-10-09",done:false},
  {id:5,title:"Plan November priorities",category:"Planning",priority:"Medium",due:"2026-10-28",done:false}
 ];
-let tasks;try{tasks=JSON.parse(localStorage.getItem("fall-focus-tasks"))||seed}catch{tasks=seed}
-let filter="All",query="";
+let tasks=[],filter="All",query="",user=null,channel=null;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const date=s=>new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric"}).format(new Date(s+"T12:00:00"));
-function save(){localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks))}
+function localTasks(){try{return JSON.parse(localStorage.getItem("fall-focus-tasks"))||seed}catch{return seed}}
+function setSync(text,online=false){$("#sync-status").textContent=text;$("#sync-status").classList.toggle("online",online)}
+async function loadTasks(){
+ if(!user){tasks=localTasks();render();return}
+ setSync("Syncing…");
+ const {data,error}=await cloud.from("tasks").select("*").order("created_at",{ascending:false});
+ if(error){setSync("Sync error");console.error(error);return}
+ tasks=data;
+ if(!tasks.length&&!localStorage.getItem("fall-focus-migrated")){
+   const old=localTasks();
+   if(old.length){const rows=old.map(({id,...t})=>({...t,user_id:user.id}));const result=await cloud.from("tasks").insert(rows).select();if(!result.error)tasks=result.data}
+   localStorage.setItem("fall-focus-migrated","1");
+ }
+ setSync("Synced",true);render();subscribe();
+}
+function subscribe(){
+ if(channel)cloud.removeChannel(channel);
+ channel=cloud.channel("task-updates").on("postgres_changes",{event:"*",schema:"public",table:"tasks",filter:"user_id=eq."+user.id},()=>loadTasks()).subscribe();
+}
+async function toggleTask(id){const t=tasks.find(x=>String(x.id)===String(id));if(user){await cloud.from("tasks").update({done:!t.done}).eq("id",id)}else{t.done=!t.done;localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks));render()}}
+async function deleteTask(id){if(user){await cloud.from("tasks").delete().eq("id",id)}else{tasks=tasks.filter(t=>String(t.id)!==String(id));localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks));render()}}
 function render(){
  const done=tasks.filter(t=>t.done).length,open=tasks.length-done,high=tasks.filter(t=>!t.done&&t.priority==="High").length,progress=tasks.length?Math.round(done/tasks.length*100):0;
  $("#progress").textContent=progress;$("#progress-bar").style.width=progress+"%";$("#open-count").textContent=open;$("#done-count").textContent=done;$("#high-count").textContent=high;
@@ -79,16 +112,21 @@ function render(){
   <button class="check" data-check="${t.id}" aria-label="Toggle task">${t.done?"✓":""}</button>
   <div class="task-body"><h3>${esc(t.title)}</h3><div class="meta"><span class="tag ${t.category.toLowerCase()}">${t.category}</span><span class="priority ${t.priority.toLowerCase()}"><i></i>${t.priority}</span><span class="date">▣ ${date(t.due)}</span></div></div>
   <button class="delete" data-delete="${t.id}" aria-label="Delete task">×</button></article>`).join(""):`<div class="empty"><span class="leaf-icon">⌁</span><h3>Nothing here yet</h3><p>Enjoy the breathing room, or add a new task.</p></div>`;
- document.querySelectorAll("[data-check]").forEach(b=>b.onclick=()=>{const t=tasks.find(t=>t.id==b.dataset.check);t.done=!t.done;save();render()});
- document.querySelectorAll("[data-delete]").forEach(b=>b.onclick=()=>{tasks=tasks.filter(t=>t.id!=b.dataset.delete);save();render()});
+ document.querySelectorAll("[data-check]").forEach(b=>b.onclick=()=>toggleTask(b.dataset.check));
+ document.querySelectorAll("[data-delete]").forEach(b=>b.onclick=()=>deleteTask(b.dataset.delete));
 }
 ["All","Open","Done","Work","Planning","Personal"].forEach(name=>{const b=document.createElement("button");b.textContent=name;b.onclick=()=>{filter=name;document.querySelectorAll("#filters button").forEach(x=>x.classList.toggle("active",x===b));render()};if(name==="All")b.className="active";$("#filters").append(b)});
 $("#search").oninput=e=>{query=e.target.value.toLowerCase();render()};
 $("#open-form").onclick=()=>{$("#modal").hidden=false;setTimeout(()=>$("#title").focus(),0)};
 $("#close-form").onclick=()=>$("#modal").hidden=true;
 $("#modal").onclick=e=>{if(e.target===$("#modal"))$("#modal").hidden=true};
-$("#task-form").onsubmit=e=>{e.preventDefault();tasks.unshift({id:Date.now(),title:$("#title").value.trim(),category:$("#category").value,priority:$("#priority").value,due:$("#due").value,done:false});save();e.target.reset();$("#due").value="2026-09-01";$("#modal").hidden=true;render()};
-render();
+$("#task-form").onsubmit=async e=>{e.preventDefault();const task={title:$("#title").value.trim(),category:$("#category").value,priority:$("#priority").value,due:$("#due").value,done:false};if(user){const {error}=await cloud.from("tasks").insert({...task,user_id:user.id});if(error){alert("Could not save task: "+error.message);return}}else{tasks.unshift({...task,id:Date.now()});localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks));render()}e.target.reset();$("#due").value="2026-09-01";$("#modal").hidden=true};
+$("#account-button").onclick=async()=>{if(user){await cloud.auth.signOut();return}$("#auth-modal").hidden=false;$("#auth-email").focus()};
+$("#close-auth").onclick=()=>$("#auth-modal").hidden=true;
+$("#auth-form").onsubmit=async e=>{e.preventDefault();const button=e.submitter;button.disabled=true;$("#auth-message").textContent="Sending…";const {error}=await cloud.auth.signInWithOtp({email:$("#auth-email").value,options:{emailRedirectTo:location.origin}});$("#auth-message").textContent=error?error.message:"Check your email for the sign-in link.";button.disabled=false};
+async function applySession(session){user=session?.user||null;$("#account-button").textContent=user?"Sign out":"Sign in";if(!user){if(channel)cloud.removeChannel(channel);setSync("Sign in to sync");tasks=localTasks();render()}else{$("#auth-modal").hidden=true;await loadTasks()}}
+cloud.auth.onAuthStateChange((_event,session)=>setTimeout(()=>applySession(session),0));
+cloud.auth.getSession().then(({data})=>applySession(data.session));
 </script>
 </body>
 </html>
