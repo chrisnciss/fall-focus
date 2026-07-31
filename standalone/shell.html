@@ -130,8 +130,8 @@ async function loadWorkspaces(){
  const select=$("#workspace-select");select.innerHTML='<option value="">Personal list</option>'+workspaces.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join("");select.value=currentWorkspace;
  $("#workspace-list").innerHTML=workspaces.length?workspaces.map(w=>`<div class="workspace-card"><span>${esc(w.name)}</span><span>Code: <code>${esc(w.invite_code)}</code></span></div>`).join(""):'<p class="auth-note">No shared lists yet.</p>';
 }
-async function toggleTask(id){const t=tasks.find(x=>String(x.id)===String(id));if(user){await cloud.from("tasks").update({done:!t.done}).eq("id",id)}else{t.done=!t.done;localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks));render()}}
-async function deleteTask(id){if(user){await cloud.from("tasks").delete().eq("id",id)}else{tasks=tasks.filter(t=>String(t.id)!==String(id));localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks));render()}}
+async function toggleTask(id){const t=tasks.find(x=>String(x.id)===String(id));if(user){const {error}=await cloud.from("tasks").update({done:!t.done}).eq("id",id);if(error){alert("Could not update task: "+error.message);return}t.done=!t.done;render()}else{t.done=!t.done;localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks));render()}}
+async function deleteTask(id){if(user){const {error}=await cloud.from("tasks").delete().eq("id",id);if(error){alert("Could not delete task: "+error.message);return}tasks=tasks.filter(t=>String(t.id)!==String(id));render()}else{tasks=tasks.filter(t=>String(t.id)!==String(id));localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks));render()}}
 function render(){
  const done=tasks.filter(t=>t.done).length,open=tasks.length-done,high=tasks.filter(t=>!t.done&&t.priority==="High").length,progress=tasks.length?Math.round(done/tasks.length*100):0;
  $("#progress").textContent=progress;$("#progress-bar").style.width=progress+"%";$("#open-count").textContent=open;$("#done-count").textContent=done;$("#high-count").textContent=high;
@@ -150,7 +150,7 @@ $("#search").oninput=e=>{query=e.target.value.toLowerCase();render()};
 $("#open-form").onclick=()=>{$("#modal").hidden=false;setTimeout(()=>$("#title").focus(),0)};
 $("#close-form").onclick=()=>$("#modal").hidden=true;
 $("#modal").onclick=e=>{if(e.target===$("#modal"))$("#modal").hidden=true};
-$("#task-form").onsubmit=async e=>{e.preventDefault();const task={title:$("#title").value.trim(),category:$("#category").value,priority:$("#priority").value,due:$("#due").value,done:false};if(user){const {error}=await cloud.from("tasks").insert({...task,user_id:user.id,workspace_id:currentWorkspace||null});if(error){alert("Could not save task: "+error.message);return}}else{tasks.unshift({...task,id:Date.now()});localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks));render()}e.target.reset();$("#due").value="2026-09-01";$("#modal").hidden=true};
+$("#task-form").onsubmit=async e=>{e.preventDefault();const task={title:$("#title").value.trim(),category:$("#category").value,priority:$("#priority").value,due:$("#due").value,done:false};if(user){const {data,error}=await cloud.from("tasks").insert({...task,user_id:user.id,workspace_id:currentWorkspace||null}).select().single();if(error){alert("Could not save task: "+error.message);return}tasks.unshift(data);render()}else{tasks.unshift({...task,id:Date.now()});localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks));render()}e.target.reset();$("#due").value="2026-09-01";$("#modal").hidden=true};
 $("#workspace-select").onchange=async e=>{currentWorkspace=e.target.value;localStorage.setItem("fall-focus-workspace",currentWorkspace);await loadTasks()};
 $("#manage-workspaces").onclick=()=>$("#workspace-modal").hidden=false;
 $("#close-workspaces").onclick=()=>$("#workspace-modal").hidden=true;
