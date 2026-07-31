@@ -6,7 +6,7 @@
   <title>Fall Focus</title>
   <meta name="description" content="A calm, seasonal task tracker for getting meaningful work done.">
   <style>/*__STYLES__*/
-  .brand-mark{font-size:18px}.add-form{display:grid;gap:18px}.add-form h2{font-family:"Instrument Serif",serif;font-size:46px;font-weight:400;line-height:.95;margin:0 0 8px}.add-form label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.12em;font-weight:600;color:var(--muted)}.add-form input,.add-form select{width:100%;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);outline:0;padding:11px 2px;margin-top:4px}.add-form input:focus,.add-form select:focus{border-color:var(--rust)}.modal[hidden]{display:none}.modal{display:block}.leaf-icon{font-size:22px}.check{font-size:14px}.search span{font-size:17px}.delete{font-size:18px}.account{display:flex;align-items:center;gap:12px}.account button{border:1px solid var(--line);background:transparent;padding:8px 12px;cursor:pointer;font-size:12px}.sync{font-size:11px;color:var(--muted)}.sync.online{color:var(--sage)}.auth-note{color:var(--muted);font-size:13px;line-height:1.6;margin:0}.auth-message{font-size:13px;color:var(--rust);min-height:20px}.loading{opacity:.55;pointer-events:none}@media(max-width:760px){.account .sync{display:none}}</style>
+  .brand-mark{font-size:18px}.add-form{display:grid;gap:18px}.add-form h2{font-family:"Instrument Serif",serif;font-size:46px;font-weight:400;line-height:.95;margin:0 0 8px}.add-form label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.12em;font-weight:600;color:var(--muted)}.add-form input,.add-form select{width:100%;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);outline:0;padding:11px 2px;margin-top:4px}.add-form input:focus,.add-form select:focus{border-color:var(--rust)}.modal[hidden]{display:none}.modal{display:block}.leaf-icon{font-size:22px}.check{font-size:14px}.search span{font-size:17px}.delete{font-size:18px}.account{display:flex;align-items:center;gap:12px}.account button,.workspace-picker button{border:1px solid var(--line);background:transparent;padding:8px 12px;cursor:pointer;font-size:12px}.sync{font-size:11px;color:var(--muted)}.sync.online{color:var(--sage)}.auth-note{color:var(--muted);font-size:13px;line-height:1.6;margin:0}.auth-message{font-size:13px;color:var(--rust);min-height:20px}.loading{opacity:.55;pointer-events:none}.workspace-picker{display:flex;gap:8px;align-items:center}.workspace-picker select{border:0;background:transparent;color:var(--ink);font-weight:600;max-width:190px}.workspace-list{display:grid;gap:8px}.workspace-card{border:1px solid var(--line);padding:12px;display:flex;justify-content:space-between;align-items:center;font-size:13px}.workspace-card code{color:var(--rust);font-weight:600;letter-spacing:.08em}.split-title{font-size:11px;letter-spacing:.14em;color:var(--muted);font-weight:600;margin:7px 0 0}.secondary{background:transparent;color:var(--ink);border:1px solid var(--ink);box-shadow:none}@media(max-width:760px){.account .sync{display:none}.toolbar{gap:14px}.workspace-picker{width:100%}.workspace-picker select{flex:1}}</style>
 </head>
 <body>
 <main>
@@ -33,9 +33,10 @@
   </section>
   <section class="workspace">
     <div class="toolbar">
-      <div class="filters" id="filters"></div>
+      <div class="workspace-picker"><select id="workspace-select" aria-label="Current list"><option value="">Personal list</option></select><button id="manage-workspaces" hidden>Share</button></div>
       <label class="search"><span>⌕</span><input id="search" placeholder="Search tasks"></label>
     </div>
+    <div class="filters" id="filters"></div>
     <div class="list-head"><span>TO DO</span><span id="item-count"></span></div>
     <div class="task-list" id="task-list"></div>
   </section>
@@ -65,6 +66,24 @@
       <button class="primary submit" type="submit">Email me a sign-in link</button>
     </form>
   </div>
+  <div class="modal-backdrop modal" id="workspace-modal" hidden>
+    <div class="modal add-form">
+      <button type="button" class="close" id="close-workspaces" aria-label="Close">×</button>
+      <p class="eyebrow">SHARED FOCUS</p>
+      <h2>Plan together,<br><em>finish together.</em></h2>
+      <p class="split-title">YOUR SHARED LISTS</p>
+      <div class="workspace-list" id="workspace-list"><p class="auth-note">No shared lists yet.</p></div>
+      <form id="create-workspace">
+        <label>New shared list<input id="workspace-name" required maxlength="80" placeholder="Family fall projects"></label>
+        <button class="primary submit" type="submit">Create shared list</button>
+      </form>
+      <form id="join-workspace">
+        <label>Invite code<input id="workspace-code" required maxlength="10" placeholder="AB12CD34EF"></label>
+        <button class="primary secondary submit" type="submit">Join a shared list</button>
+      </form>
+      <p class="auth-message" id="workspace-message"></p>
+    </div>
+  </div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -77,7 +96,7 @@ const seed=[
  {id:4,title:"Prepare quarterly review",category:"Work",priority:"High",due:"2026-10-09",done:false},
  {id:5,title:"Plan November priorities",category:"Planning",priority:"Medium",due:"2026-10-28",done:false}
 ];
-let tasks=[],filter="All",query="",user=null,channel=null;
+let tasks=[],workspaces=[],currentWorkspace="",filter="All",query="",user=null,channel=null;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const date=s=>new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric"}).format(new Date(s+"T12:00:00"));
@@ -86,10 +105,12 @@ function setSync(text,online=false){$("#sync-status").textContent=text;$("#sync-
 async function loadTasks(){
  if(!user){tasks=localTasks();render();return}
  setSync("Syncing…");
- const {data,error}=await cloud.from("tasks").select("*").order("created_at",{ascending:false});
+ let request=cloud.from("tasks").select("*").order("created_at",{ascending:false});
+ request=currentWorkspace?request.eq("workspace_id",currentWorkspace):request.eq("user_id",user.id).is("workspace_id",null);
+ const {data,error}=await request;
  if(error){setSync("Sync error");console.error(error);return}
  tasks=data;
- if(!tasks.length&&!localStorage.getItem("fall-focus-migrated")){
+ if(!currentWorkspace&&!tasks.length&&!localStorage.getItem("fall-focus-migrated")){
    const old=localTasks();
    if(old.length){const rows=old.map(({id,...t})=>({...t,user_id:user.id}));const result=await cloud.from("tasks").insert(rows).select();if(!result.error)tasks=result.data}
    localStorage.setItem("fall-focus-migrated","1");
@@ -98,7 +119,16 @@ async function loadTasks(){
 }
 function subscribe(){
  if(channel)cloud.removeChannel(channel);
- channel=cloud.channel("task-updates").on("postgres_changes",{event:"*",schema:"public",table:"tasks",filter:"user_id=eq."+user.id},()=>loadTasks()).subscribe();
+ const realtimeFilter=currentWorkspace?"workspace_id=eq."+currentWorkspace:"user_id=eq."+user.id;
+ channel=cloud.channel("task-updates-"+(currentWorkspace||"personal")).on("postgres_changes",{event:"*",schema:"public",table:"tasks",filter:realtimeFilter},()=>loadTasks()).subscribe();
+}
+async function loadWorkspaces(){
+ const {data,error}=await cloud.from("workspaces").select("id,name,invite_code,owner_id").order("created_at");
+ if(error){console.error(error);return}
+ workspaces=data||[];
+ if(currentWorkspace&&!workspaces.some(w=>w.id===currentWorkspace))currentWorkspace="";
+ const select=$("#workspace-select");select.innerHTML='<option value="">Personal list</option>'+workspaces.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join("");select.value=currentWorkspace;
+ $("#workspace-list").innerHTML=workspaces.length?workspaces.map(w=>`<div class="workspace-card"><span>${esc(w.name)}</span><span>Code: <code>${esc(w.invite_code)}</code></span></div>`).join(""):'<p class="auth-note">No shared lists yet.</p>';
 }
 async function toggleTask(id){const t=tasks.find(x=>String(x.id)===String(id));if(user){await cloud.from("tasks").update({done:!t.done}).eq("id",id)}else{t.done=!t.done;localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks));render()}}
 async function deleteTask(id){if(user){await cloud.from("tasks").delete().eq("id",id)}else{tasks=tasks.filter(t=>String(t.id)!==String(id));localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks));render()}}
@@ -120,11 +150,16 @@ $("#search").oninput=e=>{query=e.target.value.toLowerCase();render()};
 $("#open-form").onclick=()=>{$("#modal").hidden=false;setTimeout(()=>$("#title").focus(),0)};
 $("#close-form").onclick=()=>$("#modal").hidden=true;
 $("#modal").onclick=e=>{if(e.target===$("#modal"))$("#modal").hidden=true};
-$("#task-form").onsubmit=async e=>{e.preventDefault();const task={title:$("#title").value.trim(),category:$("#category").value,priority:$("#priority").value,due:$("#due").value,done:false};if(user){const {error}=await cloud.from("tasks").insert({...task,user_id:user.id});if(error){alert("Could not save task: "+error.message);return}}else{tasks.unshift({...task,id:Date.now()});localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks));render()}e.target.reset();$("#due").value="2026-09-01";$("#modal").hidden=true};
+$("#task-form").onsubmit=async e=>{e.preventDefault();const task={title:$("#title").value.trim(),category:$("#category").value,priority:$("#priority").value,due:$("#due").value,done:false};if(user){const {error}=await cloud.from("tasks").insert({...task,user_id:user.id,workspace_id:currentWorkspace||null});if(error){alert("Could not save task: "+error.message);return}}else{tasks.unshift({...task,id:Date.now()});localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks));render()}e.target.reset();$("#due").value="2026-09-01";$("#modal").hidden=true};
+$("#workspace-select").onchange=async e=>{currentWorkspace=e.target.value;localStorage.setItem("fall-focus-workspace",currentWorkspace);await loadTasks()};
+$("#manage-workspaces").onclick=()=>$("#workspace-modal").hidden=false;
+$("#close-workspaces").onclick=()=>$("#workspace-modal").hidden=true;
+$("#create-workspace").onsubmit=async e=>{e.preventDefault();$("#workspace-message").textContent="Creating…";const {data,error}=await cloud.rpc("create_workspace",{workspace_name:$("#workspace-name").value});if(error){$("#workspace-message").textContent=error.message;return}currentWorkspace=data.id;$("#workspace-name").value="";await loadWorkspaces();await loadTasks();$("#workspace-message").textContent="Shared list created. Send its invite code to the other person."};
+$("#join-workspace").onsubmit=async e=>{e.preventDefault();$("#workspace-message").textContent="Joining…";const {data,error}=await cloud.rpc("join_workspace",{workspace_code:$("#workspace-code").value});if(error){$("#workspace-message").textContent=error.message;return}currentWorkspace=data;$("#workspace-code").value="";await loadWorkspaces();await loadTasks();$("#workspace-message").textContent="You joined the shared list."};
 $("#account-button").onclick=async()=>{if(user){await cloud.auth.signOut();return}$("#auth-modal").hidden=false;$("#auth-email").focus()};
 $("#close-auth").onclick=()=>$("#auth-modal").hidden=true;
 $("#auth-form").onsubmit=async e=>{e.preventDefault();const button=e.submitter;button.disabled=true;$("#auth-message").textContent="Sending…";const {error}=await cloud.auth.signInWithOtp({email:$("#auth-email").value,options:{emailRedirectTo:location.origin}});$("#auth-message").textContent=error?error.message:"Check your email for the sign-in link.";button.disabled=false};
-async function applySession(session){user=session?.user||null;$("#account-button").textContent=user?"Sign out":"Sign in";if(!user){if(channel)cloud.removeChannel(channel);setSync("Sign in to sync");tasks=localTasks();render()}else{$("#auth-modal").hidden=true;await loadTasks()}}
+async function applySession(session){user=session?.user||null;$("#account-button").textContent=user?"Sign out":"Sign in";$("#manage-workspaces").hidden=!user;if(!user){if(channel)cloud.removeChannel(channel);currentWorkspace="";workspaces=[];$("#workspace-select").innerHTML='<option value="">Personal list</option>';setSync("Sign in to sync");tasks=localTasks();render()}else{$("#auth-modal").hidden=true;currentWorkspace=localStorage.getItem("fall-focus-workspace")||"";await loadWorkspaces();await loadTasks()}}
 cloud.auth.onAuthStateChange((_event,session)=>setTimeout(()=>applySession(session),0));
 cloud.auth.getSession().then(({data})=>applySession(data.session));
 </script>

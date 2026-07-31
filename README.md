@@ -10,6 +10,8 @@ A warm, seasonal task tracker for planning and completing meaningful work during
 - Search tasks by name
 - Track seasonal progress automatically
 - Save tasks in the browser with local storage
+- Sync personal tasks securely across devices with Supabase Auth
+- Create shared workspaces and join them with invite codes
 - Responsive layout for desktop and mobile
 
 ## Live app
@@ -54,4 +56,4 @@ Pushing to GitHub saves the source and its history, but it does not automaticall
 
 ## Data storage
 
-Tasks are stored in the browser's local storage. They remain on the same browser and device, but they are not synchronized between devices or accounts.
+Signed-in tasks are stored in Supabase and protected with row-level security. Personal lists are private to each account; shared workspace tasks are available only to workspace members. Tasks created before sign-in are migrated from browser storage on the first signed-in device.
