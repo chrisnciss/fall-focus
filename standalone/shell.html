@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Fall Focus</title>
+  <meta name="description" content="A calm, seasonal task tracker for getting meaningful work done.">
+  <style>/*__STYLES__*/
+  .brand-mark{font-size:18px}.add-form{display:grid;gap:18px}.add-form h2{font-family:"Instrument Serif",serif;font-size:46px;font-weight:400;line-height:.95;margin:0 0 8px}.add-form label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.12em;font-weight:600;color:var(--muted)}.add-form input,.add-form select{width:100%;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);outline:0;padding:11px 2px;margin-top:4px}.add-form input:focus,.add-form select:focus{border-color:var(--rust)}.modal[hidden]{display:none}.modal{display:block}.leaf-icon{font-size:22px}.check{font-size:14px}.search span{font-size:17px}.delete{font-size:18px}</style>
+</head>
+<body>
+<main>
+  <header>
+    <a class="brand" href="#"><span class="brand-mark">⌁</span><span>Fall <i>Focus</i></span></a>
+    <div class="season"><span></span> FALL 2026</div>
+  </header>
+  <section class="hero">
+    <div>
+      <p class="eyebrow">YOUR SEASON, CLEARLY PLANNED</p>
+      <h1>Make space for<br><em>what matters.</em></h1>
+      <p class="intro">A simple home for the work you want to finish this fall. One task, one week, one win at a time.</p>
+    </div>
+    <div class="hero-action">
+      <button class="primary" id="open-form">＋ Add a task</button>
+      <p id="open-caption"></p>
+    </div>
+  </section>
+  <section class="stats" aria-label="Task summary">
+    <div><span class="stat-label">SEASON PROGRESS</span><strong><span id="progress">0</span><small>%</small></strong><div class="bar"><i id="progress-bar"></i></div></div>
+    <div><span class="stat-label">OPEN TASKS</span><strong id="open-count">0</strong><p>Still in motion</p></div>
+    <div><span class="stat-label">COMPLETED</span><strong id="done-count">0</strong><p>Wins this fall</p></div>
+    <div><span class="stat-label">HIGH PRIORITY</span><strong class="rust" id="high-count">0</strong><p>Needs attention</p></div>
+  </section>
+  <section class="workspace">
+    <div class="toolbar">
+      <div class="filters" id="filters"></div>
+      <label class="search"><span>⌕</span><input id="search" placeholder="Search tasks"></label>
+    </div>
+    <div class="list-head"><span>TO DO</span><span id="item-count"></span></div>
+    <div class="task-list" id="task-list"></div>
+  </section>
+  <footer><span>FALL FOCUS</span><p>Small progress is still progress.</p><span>EST. 2026</span></footer>
+  <div class="modal-backdrop modal" id="modal" hidden>
+    <form class="modal add-form" id="task-form">
+      <button type="button" class="close" id="close-form" aria-label="Close">×</button>
+      <p class="eyebrow">A FRESH START</p>
+      <h2>Add something<br><em>worth finishing.</em></h2>
+      <label>Task name<input id="title" required placeholder="What needs to get done?"></label>
+      <div class="form-row">
+        <label>Category<select id="category"><option>Work</option><option>Planning</option><option>Personal</option></select></label>
+        <label>Priority<select id="priority"><option>High</option><option selected>Medium</option><option>Low</option></select></label>
+      </div>
+      <label>Due date<input id="due" type="date" required value="2026-09-01"></label>
+      <button class="primary submit" type="submit">＋ Add task</button>
+    </form>
+  </div>
+</main>
+<script>
+const seed=[
+ {id:1,title:"Finish project proposal",category:"Work",priority:"High",due:"2026-09-12",done:false},
+ {id:2,title:"Schedule fall check-in",category:"Planning",priority:"Medium",due:"2026-09-18",done:false},
+ {id:3,title:"Organize research notes",category:"Personal",priority:"Low",due:"2026-10-02",done:true},
+ {id:4,title:"Prepare quarterly review",category:"Work",priority:"High",due:"2026-10-09",done:false},
+ {id:5,title:"Plan November priorities",category:"Planning",priority:"Medium",due:"2026-10-28",done:false}
+];
+let tasks;try{tasks=JSON.parse(localStorage.getItem("fall-focus-tasks"))||seed}catch{tasks=seed}
+let filter="All",query="";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const date=s=>new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric"}).format(new Date(s+"T12:00:00"));
+function save(){localStorage.setItem("fall-focus-tasks",JSON.stringify(tasks))}
+function render(){
+ const done=tasks.filter(t=>t.done).length,open=tasks.length-done,high=tasks.filter(t=>!t.done&&t.priority==="High").length,progress=tasks.length?Math.round(done/tasks.length*100):0;
+ $("#progress").textContent=progress;$("#progress-bar").style.width=progress+"%";$("#open-count").textContent=open;$("#done-count").textContent=done;$("#high-count").textContent=high;
+ $("#open-caption").textContent=open+" open task"+(open===1?"":"s")+" this season";
+ const shown=tasks.filter(t=>(filter==="All"||(filter==="Open"&&!t.done)||(filter==="Done"&&t.done)||t.category===filter)&&t.title.toLowerCase().includes(query)).sort((a,b)=>Number(a.done)-Number(b.done)||new Date(a.due)-new Date(b.due));
+ $("#item-count").textContent=shown.length+" "+(shown.length===1?"ITEM":"ITEMS");
+ $("#task-list").innerHTML=shown.length?shown.map(t=>`<article class="task ${t.done?"completed":""}">
+  <button class="check" data-check="${t.id}" aria-label="Toggle task">${t.done?"✓":""}</button>
+  <div class="task-body"><h3>${esc(t.title)}</h3><div class="meta"><span class="tag ${t.category.toLowerCase()}">${t.category}</span><span class="priority ${t.priority.toLowerCase()}"><i></i>${t.priority}</span><span class="date">▣ ${date(t.due)}</span></div></div>
+  <button class="delete" data-delete="${t.id}" aria-label="Delete task">×</button></article>`).join(""):`<div class="empty"><span class="leaf-icon">⌁</span><h3>Nothing here yet</h3><p>Enjoy the breathing room, or add a new task.</p></div>`;
+ document.querySelectorAll("[data-check]").forEach(b=>b.onclick=()=>{const t=tasks.find(t=>t.id==b.dataset.check);t.done=!t.done;save();render()});
+ document.querySelectorAll("[data-delete]").forEach(b=>b.onclick=()=>{tasks=tasks.filter(t=>t.id!=b.dataset.delete);save();render()});
+}
+["All","Open","Done","Work","Planning","Personal"].forEach(name=>{const b=document.createElement("button");b.textContent=name;b.onclick=()=>{filter=name;document.querySelectorAll("#filters button").forEach(x=>x.classList.toggle("active",x===b));render()};if(name==="All")b.className="active";$("#filters").append(b)});
+$("#search").oninput=e=>{query=e.target.value.toLowerCase();render()};
+$("#open-form").onclick=()=>{$("#modal").hidden=false;setTimeout(()=>$("#title").focus(),0)};
+$("#close-form").onclick=()=>$("#modal").hidden=true;
+$("#modal").onclick=e=>{if(e.target===$("#modal"))$("#modal").hidden=true};
+$("#task-form").onsubmit=e=>{e.preventDefault();tasks.unshift({id:Date.now(),title:$("#title").value.trim(),category:$("#category").value,priority:$("#priority").value,due:$("#due").value,done:false});save();e.target.reset();$("#due").value="2026-09-01";$("#modal").hidden=true;render()};
+render();
+</script>
+</body>
+</html>
